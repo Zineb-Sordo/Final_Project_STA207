@@ -1,0 +1,1089 @@
+---
+title: "COVID 19: Analysis of the impact of vaccination and social restrictions"
+author: "Zineb Sordo"
+date: "3/4/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE, echo=FALSE}
+require(pander)
+require(gtsummary)
+require(kableExtra)
+require(tidyverse)
+require(dplyr)
+require(MASS)
+require(xtable)
+require(data.table)
+require(ggplot2)
+require(haven)
+require(naniar)
+require(gridExtra)
+require(gtable)
+require(grid)
+require(nortest)
+require(lubridate)
+require(maps)
+require(report)
+require(GGally)
+require(gplots)
+require(car)
+require(patchwork) # To display 2 charts together
+require(COVID19)
+require(performance)
+require(qwraps2)
+require(lmtest)
+
+library(pander)
+library(gtsummary)
+library(kableExtra)
+library(tidyverse)
+library(dplyr)
+library(MASS)
+library(xtable)
+library(data.table)
+library(ggplot2)
+library(haven)
+library(naniar)
+library(gridExtra)
+library(gtable)
+library(grid)
+library(nortest)
+library(lubridate)
+library(maps)
+library(report)
+library(GGally)
+library(gplots)
+library(car)
+library(patchwork) # To display 2 charts together
+library(COVID19)
+library(performance)
+library(qwraps2)
+library(lmtest)
+options(qwraps2_markup = "markdown")
+```
+
+# Overview 
+
+This project aims at analyzing the COVID 19 pandemic that has been in our daily lives for two years. Using specific variables and a thorough data analysis of two datasets, one of which is the complete WHO dataset available online. Since there are so many questions we can try to answer in this subject, we will narrow down out ideas on two specific features: the vaccination variable and the variable representing social and government restrictions in different countries. The goal will be to see how these features have impacted over time the number of positive cases and analyze its relation to the fatality rate (respectively). 
+
+***
+
+# Background
+
+The coronavirus (COVID 19) pandemic first started at the end of 2019 after being detected in Wuhan, China. The virus first started to spread in China and due to international travel, quickly spread across Asia, Europe an all over the world. This pandemic had a deep impact in almost every aspect of life as we know it worldwide. Indeed, despite the symptoms being very similar to simple cold to the (SARS) virus that spread in Asia in 2003, the coronavirus was more contagious and rapidly lead to mass contamination and even death in all continents. Since the epidemic began, each country put in place many health measures like social isolation, mandatory masks and mass screening measures that enabled to control the spread of the virus. Isolation measures seek to delay major outbreaks and level the demand for hospital material capacity and prevent the healthcare system to collapse.
+
+![Caption for the picture.](/Users/zinebsordo/classes/sta207/project/plots/plot1.png)
+
+***
+
+![Caption for the picture.](/Users/zinebsordo/classes/sta207/project/plots/plot2.png)
+
+
+After nearly a year, the first vaccine shot was injected and for the past year or so, the number of vaccinations have increased all over the world, and most specifically in developed or economically-stable countries. Since there was a lot of different COVID19 variants, the number of necessary shots keeps increasing. These different types of vaccine have proved to be efficient when it came to avoiding serious cases and hospitalizations and thus reduce drastically the case- mortality rate. As of today, there is 10,279,668,555 administered vaccine doses in the world and 5,844,097 deaths since the beginning of the pandemic. However, since the vaccination rate across the world has been inconsistent due to the vaccine controversies as well as socio- economic issues in certain countries, the number of variants has increased and in consequence the number of positive cases as well. As of today, we are at 416,614,051 confirmed cases with a striking increase in the last few months due to the very contagious variant OMICRON. 
+
+![Caption for the picture.](/Users/zinebsordo/classes/sta207/project/plots/plot3.png)
+
+***
+
+![Caption for the picture.](/Users/zinebsordo/classes/sta207/project/plots/plot4.png)
+
+
+Based on this brief background analysis of the COVID19 situation around the world, we can now choose to focus on the important features concerning vaccination data and the ones concerning the different health measures and restrictions each country has taken to limit the spread of the virus. These features will then be used to analyze their impact the number of positive cases and the CFR (case fatality-rate) where:
+  
+  
+  $CFR\  (Case \ Fatality \ Rate) = \frac{Total\  number \ of \ deaths}{Total \ number \ of \ cases}$
+  
+  
+  To do so, this project will attempt to answer two questions of interest:
+
+1. What is the impact of vaccination on each country’s case mortality?
+
+2. How are government restrictions around the world impacting the number of positive cases?
+
+***
+
+# Descriptive Data Analysis
+
+The first step is to analyze the datasets and select the datasets of interest:
+
+```{r p1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <-"
+| dataset         | dimension     | Number of countries |
+|-----------------|:-------------:|--------------------:|
+| owid-data-covid | 165408 x 67   | 238.                |
+| WHO             | 187180 x 8    | 237.                |
+| COVID19 package | 173733 x 47   | 234.                |
+"
+
+cat(tabl) 
+```
+Since the variables in the COVID19 package are similar to those in the 'owid' 
+
+### Selection of countries of interest
+
+The country names are not the same for all countries, therefore the subset must be done before merging the datasets. The countries chosen are based on criteria such as population density, GDP or socio-economic features and the region, so that the analyzed data can be as diversified as possible. 
+This information is given on the WHO website (https://covid19.who.int/) and thus the 7 countries chosen are: the United-States, Brazil, Italy, Morocco, Japan and India. 
+
+
+```{r p2, echo=FALSE, message=FALSE, warnings=FALSE}
+df_who <- read.csv("https://covid19.who.int/WHO-COVID-19-global-data.csv")
+df_who <- within(df_who, Country[Country == 'United States of America'] <- 'United States')
+
+df_who7 <- df_who[which(df_who$Country == 'United States' |
+                        df_who$Country == 'Brazil'|
+                        df_who$Country == 'Italy'|
+                        df_who$Country == 'Morocco'|
+                        df_who$Country =='Japan'|
+                        df_who$Country =='India'),]
+
+df_owid <- read.csv('owid-covid-data.csv', header=TRUE)
+df_owid7 <- df_owid[which(df_owid$location =='United States'|
+                          df_owid$location == 'Brazil'|
+                          df_owid$location == 'Italy'|
+                          df_owid$location == 'Morocco'|
+                          df_owid$location =='Japan'|
+                          df_owid$location =='India'),]
+```
+
+
+Once I have loaded the datasets and merged the two before selecting the columns, which I will analyze so that I can have a view of the dataset on a holistic level.
+
+```{r p3, echo=FALSE, message=FALSE, warnings=FALSE}
+# Merging the 2 datasets chosen 
+data <- merge(df_owid7, df_who7,  by.x=c("date","location"), by.y = c("Date_reported","Country"))
+```
+
+
+```{r p4, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+# We can now select the columns of interest
+cols_interest <- c('date',
+                   'population',
+                   'median_age',
+                   'aged_65_older',
+                   'aged_70_older',
+                   'gdp_per_capita',
+                   'new_tests',
+                   'new_vaccinations',
+                   'positive_rate',
+                   'new_cases',
+                   'new_deaths',
+                   'stringency_index',
+                   'location')
+df <- data[cols_interest]
+row.names(df) <- NULL
+```
+
+
+### Subsetting on same first date on death column 
+
+We want to subset the dataframe to have the same time range for all countries. To do so, I will look at the first dates of the observations for each country (the last country is the same for all countries since it is a continuous loaded dataset). The first dates for each countries are:
+
+```{r p5, echo=FALSE, message=FALSE, warnings=FALSE}
+df$date <- as.Date(df$date)
+
+# Summary of the first dates reported for each country for comparison and subsetting 
+summary2 <- data.frame("First day reported" = c('Brazil' = min(unique(df[which(df$location=='Brazil'), 'date'])),
+                                             'United States' = min(unique(df[which(df$location=='United States'), 'date'])),
+                                             'India' = min(unique(df[which(df$location=='India'), 'date'])),
+                                             'Italy' = min(unique(df[which(df$location=='Italy'), 'date'])),
+                                             'Japan' =  min(unique(df[which(df$location=='Japan'), 'date'])),
+                                             'Morocco' = min(unique(df[which(df$location=='Morocco'), 'date']))))
+                 
+                 
+
+kbl(summary2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+
+Thus, the latest first day of report is in Brazil, on the 2020-02-26 which will be the first common start date in this data analysis
+
+
+Next, since the NA values in the dataframe (in deaths, vaccinations, and tests) generally mean that have not been yet respectively deaths, vaccinations (since it had not started yet in most 2020), and tests, we can replace these NA values by 0's.
+
+We can then create the CFR variable (Case Fatality Rate) and then create for both these 'deaths' variables, 2 new variables but with a time shift on the date by 10 days, to take into consideration the impact of the progress of vaccination and government restriction on the CFR.
+
+
+```{r p6, echo=FALSE, message=FALSE, warnings=FALSE}
+# Creating the delayed variables for time impact observation 
+df['delayed_cases'] = df$new_cases
+df['delayed_deaths'] = df$new_deaths
+df['delayed_tests'] = df$new_tests
+
+for (loc in unique(df$location)) {
+    df[which(df$location == loc), 'delayed_deaths'] <- shift(df[which(df$location == loc), 'delayed_deaths'], 10)
+    df[which(df$location == loc), 'delayed_cases'] <- shift(df[which(df$location == loc), 'delayed_cases'], 10)
+    df[which(df$location == loc), 'delayed_tests'] <- shift(df[which(df$location == loc), 'delayed_tests'], 10)
+
+
+}
+# Creating the CFR (case fatality rate) for the original columns and the associated time-delayed column
+df['CFR'] <- df$new_deaths/df$new_cases
+df[is.na(df)] <- 0
+df['CFR_delayed'] <- df$delayed_deaths/df$delayed_cases
+df[is.na(df)] <- 0
+```
+
+# Plots and visualizations  
+
+```{r p7, echo=FALSE, message=FALSE, warnings=FALSE}
+# Generate some data
+df_us <- df[which(df$location == 'United States'),]
+p1 <- ggplot(data=df_us, aes(x=date, y=CFR)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="steelblue", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("US")
+
+
+df_brazil <- df[which(df$location == 'Brazil'),]
+p2 <- ggplot(data=df_brazil, aes(x=date, y = CFR)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="steelblue", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("BR")
+
+df_italy <- df[which(df$location == 'Italy'),]
+p3 <- ggplot(data=df_italy, aes(x=date, y=CFR)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="#69b3a2", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("IT")
+
+df_morocco <- df[which(df$location == 'Morocco'),]
+p4 <- ggplot(data=df_morocco, aes(x=date, y=CFR)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="red", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("MA")
+
+df_japan <- df[which(df$location == "Japan"),]
+p5 <- ggplot(data=df_japan, aes(x=date, y=CFR)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="#eb7d75", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("JP")
+
+df_india <- df[which(df$location == 'India'),]
+p6 <- ggplot(data=df_india, aes(x=date, y=CFR)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="#eb7d75", alpha=.4) + 
+  theme(axis.title.y = element_blank())+
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("IN") 
+
+
+yleft <- textGrob("CFR", rot = 90, gp = gpar(fontsize = 20))
+top <- textGrob("CFR plot through time for each country", gp = gpar(fontsize = 20))
+
+uni <- grid.arrange(p1, p2, p3, p4, p5,p6, ncol = 3, nrow = 2, left = yleft, top = top)
+options(repr.plot.width = 20, repr.plot.height = 5)
+
+```
+
+
+We can clearly see that with the wide time range, the distributions are multimodal. It is the most obvious for the US and Italy where we can see that vaccines were injected in mass and in a short amount of time compared to the rest of the countries where the process took more time. 
+
+We can also see that for most countries the distribution are right skewed and the CFR seems to be higher in 2020, which is in line with the absence of vaccination at that time and the exponential impact of the, then unknown and very contagious virus. 
+
+Let's now see the distributions  before and after the first common date of vaccination:
+
+```{r p8, echo=FALSE, message=FALSE, warnings=FALSE}
+summary3 <- data.frame( "First day of vaccination" = c(
+                                            'Brazil' = min(unique(df[which(df$location=='Brazil' & df$new_vaccinations !=0), 'date'])),
+                                             'United States' = min(unique(df[which(df$location=='United States' & df$new_vaccinations !=0), 'date'])),
+                                             'India' = min(unique(df[which(df$location=='India' & df$new_vaccinations !=0), 'date'])),
+                                             'Italy' = min(unique(df[which(df$location=='Italy' & df$new_vaccinations !=0), 'date'])),
+                                             'Japan' =  min(unique(df[which(df$location=='Japan' & df$new_vaccinations !=0), 'date'])),
+                                             'Morocco' = min(unique(df[which(df$location=='Morocco' & df$new_vaccinations !=0), 'date'])))
+                 )
+
+kbl(summary3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+Based on the previous table, we are going to set the limit for pre and post vaccination period to the date 2021-02-18. 
+
+
+Let's now see how the vaccination data is distributed by plotting the distribution before and after the beginning of vaccination for all countries. 
+
+
+```{r p9, echo=FALSE, message=FALSE, warnings=FALSE}
+df$vacc_period <- as.factor(ifelse(df$date >= '2021-02-18', 1, 0))
+ggplot(data = df, mapping = aes(x = vacc_period, y =CFR, fill = location))+
+  geom_boxplot(alpha = .8)+
+  stat_summary(fun = mean, geom = "point",show.legend = FALSE) +
+  scale_x_discrete(labels = c("pre-vaccine period", "post-vaccine period")) +
+  
+  ggtitle("CFR:", subtitle = "Before & after start of vaccination") +
+  xlab("Vaccination time range before and after the 2021-02-18") + ylab("CFR") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 15, face = "bold"))
+```
+
+Since, it is obviously difficult to make observations on such a wide time range, we can focus on a smaller one to find any pattern or trend. We can subset the dataset when the first vaccine shot was injected (which started in the beginning of 2021 and throughout the year until the end of the summer and beginning of Fall, with the second shot, after that the booster came in last).  
+
+
+```{r p10, echo=FALSE, message=FALSE, warnings=FALSE}
+df_vacc <- df %>% filter(df$date >= "2021-01-01" & df$date <= "2021-10-01")
+df_vacc$vacc_period <- as.factor(ifelse(df_vacc$date >= '2021-02-18', 1, 0))
+ggplot(data = df_vacc, mapping = aes(x = vacc_period, y = CFR, fill = location))+
+  geom_boxplot(alpha = .8)+
+  stat_summary(fun = mean, geom = "point",show.legend = FALSE) +
+  scale_x_discrete(labels = c("pre-vaccine period", "post-vaccine period")) +
+  
+  ggtitle("CFR:", subtitle = "Before & after start of vaccination") +
+  xlab("Vaccination time range before and after the 2021-02-18") + ylab("CFR") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 15, face = "bold"))
+```
+
+
+
+We can now see the progress of vaccination over time for each country with a different plot and with a smaller time range as we did previously: 
+
+```{r p36, warning=FALSE, echo=FALSE, message=FALSE}
+
+df_us <- df_vacc[which(df_vacc$location == 'United States'),]
+p1 <- ggplot(data=df_us, aes(x=date, y=new_vaccinations)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="steelblue", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("US")
+
+
+df_brazil <- df_vacc[which(df_vacc$location == 'Brazil'),]
+p2 <- ggplot(data=df_brazil, aes(x=date, y = new_vaccinations)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="steelblue", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("BR")
+
+df_italy <- df_vacc[which(df_vacc$location == 'Italy'),]
+p3 <- ggplot(data=df_italy, aes(x=date, y=new_vaccinations)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="#69b3a2", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("IT")
+
+df_morocco <- df_vacc[which(df_vacc$location == 'Morocco'),]
+p4 <- ggplot(data=df_morocco, aes(x=date, y=new_vaccinations)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="red", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("MA")
+
+df_japan <- df_vacc[which(df_vacc$location == "Japan"),]
+p5 <- ggplot(data=df_japan, aes(x=date, y=new_vaccinations)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="#eb7d75", alpha=.4) + 
+  theme(axis.title.y = element_blank()) +
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("JP")
+
+df_india <- df_vacc[which(df_vacc$location == 'India'),]
+p6 <- ggplot(data=df_india, aes(x=date, y=new_vaccinations)) +
+  geom_bar(position = "dodge", stat="identity", size=.1, fill="#eb7d75", alpha=.4) + 
+  theme(axis.title.y = element_blank())+
+    scale_x_date(date_labels = "%m-%Y") +
+  ggtitle("IN") 
+
+
+yleft <- textGrob("Number of vaccines injected", rot = 90, gp = gpar(fontsize = 20))
+top <- textGrob("Number of vaccination plot through time for each country", gp = gpar(fontsize = 20))
+
+uni <- grid.arrange(p1, p2, p3, p4, p5,p6, ncol = 3, nrow = 2, left = yleft, top = top)
+options(repr.plot.width = 15, repr.plot.height = 5)
+```
+
+After sub-setting to approximately the first and second vaccine shots, we can see that the US and Italy and Japan vaccination data seems to be normally distributed. However, for the other countries, the data is either still slightly multimodal or highly skewed (Brazil). Finally, we can see that there is a lot of variability in the data, since the data has not been aggregated and all days where taken into consideration, this might explain the high variance. 
+
+
+
+```{r p11, echo=FALSE, message=FALSE, warnings=FALSE}
+
+df_agg <- setNames(aggregate(df_vacc$new_deaths/df_vacc$population, by=list(Category=df_vacc$location), FUN=sum), c('location', 'new_deaths'))
+df_vacc$location[df_vacc$location == "United States"] <- "USA"
+
+world_map <- map_data("world")
+world_map <- subset(world_map, region != "Antarctica")
+
+ggplot(df_agg) +
+  geom_map(
+    dat = world_map, map = world_map, aes(map_id = region),
+    fill = "white", color = "#7f7f7f", size = 0.25
+  ) +
+  geom_map(map = world_map, aes(map_id = location, fill = new_deaths), size = 0.25) +
+  scale_fill_gradient(low = "#fff7bc", high = "#cc4c02", name = "Death rate per population") +
+  expand_limits(x = world_map$long, y = world_map$lat) + theme(aspect.ratio = 0.5) + labs(title="World feature map of the death rate for 6 countries")
+
+
+```
+
+```{r p12, echo=FALSE, message=FALSE, warnings=FALSE}
+df_agg <- setNames(aggregate(df_vacc$new_vaccinations/df_vacc$population, by=list(Category=df_vacc$location), FUN=sum), c('location', 'total_vacc'))
+world_map <- map_data("world")
+world_map <- subset(world_map, region != "Antarctica")
+
+ggplot(df_agg) +
+  geom_map(
+    dat = world_map, map = world_map, aes(map_id = region),
+    fill = "white", color = "#7f7f7f", size = 0.25
+  ) +
+  geom_map(map = world_map, aes(map_id = location, fill = total_vacc), size = 0.25) +
+  scale_fill_gradient(low = "#fff7bc", high = "#cc4c02", name = "Vaccination rate per population") +
+  expand_limits(x = world_map$long, y = world_map$lat) + theme(aspect.ratio = 0.5) + labs(title="World feature map of the vaccination rate for 6 countries")
+
+```
+
+These 2 world feature maps highlight the difference in the the vaccination rate in each of the chosen countries in terms of population density, GDP and socio-economic situation, which obviously impact the vaccination and death rate of these countries (in that view, the means and progress to handle the pandemic can be different for each country). 
+
+### Summary statistics:
+
+```{r p13, echo=FALSE, message=FALSE, warnings=FALSE}
+#removing rows where CFR values that are infinite (since large dataset, we can afford to remove a few rows)
+
+df_vacc <- df_vacc[-c(117,571,1585, 127, 581, 1595), ]
+
+# no scientific type results for this summary
+options(scipen=999)
+summary1 <- list("new_vaccinations" = list("min" = ~ format(min(new_vaccinations, na.rm=TRUE), scientific = F),
+                                           "max" = ~ max(new_vaccinations, na.rm=TRUE),
+                                           "mean"  = ~ round(mean(new_vaccinations , na.rm=TRUE), 2),
+                                           "sd" = ~ round(sd(new_vaccinations,  na.rm=TRUE), 2),
+                                           "1st quantile" = ~ quantile(new_vaccinations,  na.rm=TRUE)[2],
+                                           "3rd quantile" = ~ quantile(new_vaccinations, na.rm=TRUE)[4]),
+                 "new_cases" = list("min" = ~ min(new_cases, na.rm=TRUE),
+                                    "max" = ~ max(new_cases, na.rm=TRUE),
+                                    "mean"  = ~ round(mean(new_cases , na.rm=TRUE), 2),
+                                    "sd" = ~ round(sd(new_cases,  na.rm=TRUE), 2),
+                                    "1st quantile" = ~ quantile(new_cases,  na.rm=TRUE)[2],
+                                    "3rd quantile" = ~ quantile(new_cases, na.rm=TRUE)[4]),
+                 "new_deaths" = list("min" = ~ min(new_deaths, na.rm=TRUE),
+                                    "max" = ~ max(new_deaths, na.rm=TRUE),
+                                    "mean"  = ~ round(mean(new_deaths , na.rm=TRUE), 2),
+                                    "sd" = ~ round(sd(new_deaths,  na.rm=TRUE), 2),
+                                    "1st quantile" = ~ quantile(new_deaths,  na.rm=TRUE)[2],
+                                    "3rd quantile" = ~ quantile(new_deaths, na.rm=TRUE)[4]),
+                 "CFR" = list("min" = ~ round(min(CFR, na.rm=TRUE),4),
+                              "max" = ~ round(max(CFR, na.rm=TRUE),4),
+                              "mean"  = ~ round(mean(CFR , na.rm=TRUE), 2),
+                              "sd" = ~ round(sd(CFR,  na.rm=TRUE), 2),
+                              "1st quantile" = ~ round(quantile(CFR,  na.rm=TRUE)[2],4),
+                              "3rd quantile" = ~ round(quantile(CFR, na.rm=TRUE)[4], 4)),
+                 "stringency_index" = list("min" = ~ min(stringency_index, na.rm=TRUE),
+                              "max" = ~ round(max(stringency_index, na.rm=TRUE),4),
+                              "mean"  = ~ round(mean(stringency_index , na.rm=TRUE), 4),
+                              "sd" = ~ round(sd(stringency_index,  na.rm=TRUE), 4),
+                              "1st quantile" = ~ round(quantile(stringency_index,  na.rm=TRUE)[2],4),
+                              "3rd quantile" = ~ round(quantile(stringency_index, na.rm=TRUE)[4], 4))
+                 )
+
+dt <- summary_table(dplyr::group_by(df_vacc, location), summary1)
+kbl(dt, caption = "Summary statistics of the continuous variables") %>%
+  kable_paper("striped", full_width = F) %>%
+  pack_rows("New vaccinations", 1, 6) %>%
+  pack_rows("New cases", 7, 12) %>%
+  pack_rows("New deaths", 13, 18) %>%
+  pack_rows("CFR", 19, 24) %>%
+  pack_rows("Stringency Index", 25, 30)
+
+
+```
+
+### Correlation between the variables
+
+
+```{r p14, echo=FALSE, message=FALSE, warnings=FALSE}
+dat <- df_vacc[, c("new_vaccinations", "new_cases", "new_deaths", "population", "median_age", "stringency_index")]
+dat2 <- df_vacc[, c("new_vaccinations", "new_cases", "new_deaths", "stringency_index", "population", "median_age", "location")]
+
+
+ggpairs(dat2, columns = 1:4, ggplot2::aes(colour=location)) 
+
+
+par(mfrow=c(3,3))
+g1 <- ggpairs(dat2[which(dat2$location=='USA'),], columns = 1:4) + labs(title = "USA")
+g2 <- ggpairs(dat2[which(dat2$location=='Italy'),], columns = 1:4) + labs(title = "Italy")
+g3 <- ggpairs(dat2[which(dat2$location=='Morocco'),], columns = 1:4) + labs(title = "Morocco")
+g4 <- ggpairs(dat2[which(dat2$location=='India'),], columns = 1:4) + labs(title = "India")
+g5 <- ggpairs(dat2[which(dat2$location=='Brazil'),], columns = 1:4) + labs(title = "Brazil")
+g6 <- ggpairs(dat2[which(dat2$location=='Japan'),], columns = 1:4) + labs(title = "Japan")
+library(cowplot)
+cowplot::plot_grid(ggmatrix_gtable(g1),
+  ggmatrix_gtable(g2),nrow=1)
+
+cowplot::plot_grid(ggmatrix_gtable(g3),
+  ggmatrix_gtable(g4),nrow=1)
+
+cowplot::plot_grid(ggmatrix_gtable(g5),
+  ggmatrix_gtable(g6),nrow=1)
+```
+
+These correlation plots show that in general, the only correlation is between the number of new cases and the number of new deaths which seems reasonable, however with a threshold of 0.7, we can confirm that there is very little correlation or none between all the other variables for each country. That statement will be useful for our modelling and associated independence assumptions. 
+
+*** 
+
+# Inferential analysis 1
+
+
+To recall the 2 questions of interest, in this project, we are focusing the analysis of: 
+  - The impact of vaccination on the CFR
+  - The impact of government impact (here represented by the variable 'stringency_index' ) on the positive cases. 
+  
+For question 1, However, government restrictions do have a direct impact on the virus' circulation and thus the number of positive cases (international travels, gatherings, events etc...)
+Therefore,  in order for us to answer these questions, we will use the following models with the associated variables: 
+
+  - Question 1: a Linear Regression with the features on vaccination, population density, country, CFR (and the associated delayed variables to compare the differences)
+  - Question 2: a 2 way-ANOVA with the features on stringency_index (which will be categorized to different levels), country, CFR
+
+
+## Model 1: 
+
+As we have highlighted in the EDA, there may be exponential increases in the number of positive cases especially in the beginning of the epidemic, when the number of vaccination was still low. However, if we consider a smaller time range, we might detect a linear relationship between vaccination and the number of deaths for each country. That is why I am choosing to use a multiple linear regression model to make this inference, with this specific subsetted dataset.
+
+In addition, the reason for choosing the target variable as the death rate is that, as we probably all know, vaccination is efficient to prevent severe cases (especially for people at risk with comorbidities or health complications) and thus reduces drastically hospitalization and death, however it does not necessarily prevent from becoming positive to COVID19. So vaccination may have more impact on the death rate rather than the positive rate. 
+
+Finally, before applying the model, we can quantitatively explain the reason for choosing the delayed variable rather than the raw one by showing the time causality between vaccination and the death rate with a Granger causality test. 
+
+Granger causality test is a statistical hypothesis test for determining whether one time series is useful in forecasting another: when the p-value is superior to the significance level 0.05, the null hypothesis stating that their is causality is rejected, otherwise, we can confirm the causality between the variables:
+
+
+
+```{r p15, echo=FALSE, message=FALSE, warnings=FALSE}
+options(scipen = 0)
+print_html(grangertest(new_vaccinations ~ new_deaths, order = 3, data = df_vacc))
+```
+Thus, the p-value is indeed inferior to the significance level, which confirms the time impact that vaccination has on the death rate and based our experience of the pandemic, we will take the delta time of impact of 10 days. 
+
+
+In that view, this first model will attempt to answer question 1 using a multiple linear regression  with the delayed death rate as the target variable and with the following predictor variables:
+
+  - new_vaccinations
+  - delayed_deaths
+  - location as a factor variable 
+  
+
+The model is the following: 
+  
+$Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_3 X_3 + \epsilon$
+
+with:
+
+  - $\epsilon$the independent and normally distributed random errors with mean 0 and unknown constant variance $\sigma^2$
+  - $X_1$ the vaccination rate
+  - $X_2$ the delayed deaths rate
+  - $X_3$ the factor variable for each country
+ 
+The assumptions for this multiple linear regression are:
+
+  - Linearity
+  - Independence
+  - Normality
+  - Homoscedasticity
+  - No outliers
+  - No multicolinearity
+
+
+For the independence assumption, we can see with the previous correlation plots and correlation matrix that (using a threshold of 0.7), none of variables are correlated and we can thus assume independence for each country. 
+
+Let's first try a basic model without any transformation but with a scaled data (necessary to improve to convergence of gradient descent in linear regression):
+
+```{r p16, echo=FALSE, warning=FALSE, message=FALSE}
+options(scipen = 0)
+
+model1 <- lm(scale(delayed_deaths) ~ scale(new_vaccinations) + scale(delayed_cases) + factor(location), data=df_vacc)
+
+tbl_regression(model1,conf.level = 0.05) %>%
+  add_vif()
+par(mfrow=c(2,2))
+plot(model1)
+```
+We can see that none of the assumptions are met, so let's try to apply non linear transformations (we have null values so a Box-Cox or a log could create Nan or infinite values), so let's try a square root transformation: 
+
+```{r p17, echo=FALSE, warning=FALSE, message=FALSE}
+options(scipen = 0)
+
+model_sqrt <- lm(sapply((delayed_deaths), sqrt) ~ scale(new_vaccinations) + scale(delayed_cases) + factor(location), data=df_vacc)
+tbl_regression(model_sqrt, conf.level = 0.05) %>%
+  add_vif()
+par(mfrow=c(2,2))
+plot(model_sqrt)
+```
+***
+
+# Sensitivity analysis 1
+
+First, we can notice that the VIF values are around 1 with shows that the variables are not correlated and which is in line with the previous correlation plots. 
+
+We can then see the presence of some outliers with leverage, and by removing these outliers, we may overfit the model, however, since we are still working with a large dataset, we can afford it.
+Let's try to run the sqrt-transformed model without outliers: 
+
+```{r p18, echo=FALSE, message=FALSE, warnings=FALSE}
+options(scipen = 0)
+HighLeverage <- cooks.distance(model_sqrt) > (4/nrow(df_vacc))
+LargeResiduals <- rstudent(model_sqrt) > 3
+df_vacc_corr <- df_vacc[!HighLeverage & !LargeResiduals,]
+corr_model_sqrt<-lm(sapply(delayed_deaths, sqrt) ~ scale(new_vaccinations) + scale(delayed_cases)+ factor(location), data=df_vacc_corr)
+tbl_regression(corr_model_sqrt, conf.level = 0.05) %>%
+  add_vif()
+cat("The adjusted R-squared obtained is " , summary(corr_model_sqrt)$adj.r.squared, "and the overall p-value is ", anova(corr_model_sqrt)$'Pr(>F)'[1], '<< 0.05')
+
+#plots for assumptions
+par(mfrow=c(2,2))
+plot(corr_model_sqrt)
+check_model(corr_model_sqrt)
+```
+
+Let's look at the normality and homoscedasticity assumptions using 2 quantitative tests: the Anderson-Darling test to check for normality of residuals and the nvc test for homoscedasticity:
+
+```{r p19, echo=FALSE, message=FALSE, warnings=FALSE}
+# Anderson-Darling test for normality of residuals
+sum_corr_model_sqrt <- summary(corr_model_sqrt)
+print(ad.test(sum_corr_model_sqrt$residuals))
+
+# nvc test for homoscedasticity
+car::ncvTest(corr_model_sqrt)
+print_html(leveneTest(summary(corr_model_sqrt)$residuals, as.factor(df_vacc_corr$location)))
+
+```
+We can see that the normality assumption does not hold even though the plots seem to show otherwise, however we must not forget that the previous test can often give biased results for very large sample sizes, which is the case here (the test is very sensitive and can often conclude that residuals are not normally distributed in that case) and in addition, for large sample the normality assumption is not necessary as the LLN assures that it is met.
+
+Let's compare the qq-plots:
+
+```{r p20, echo=FALSE, message=FALSE, warnings=FALSE}
+par(mfrow=c(1,3))
+
+#Q-Q plot for original model
+qqnorm(model1$residuals, main = "Original model")
+qqline(model1$residuals)
+
+#Q-Q plot for sqrt transformed model
+qqnorm(model_sqrt$residuals, main = "SQRT transformation")
+qqline(model_sqrt$residuals)
+
+#Q-Q plot for sqrt transformed model without outliers 
+qqnorm(sum_corr_model_sqrt$residuals, main = "SQRT without outliers")
+qqline(sum_corr_model_sqrt$residuals)
+
+```
+We can clearly see that the normality of the residuals is met with the third model after the non-linear transformation and the outlier correction. 
+
+Now that we see that the assumptions hold for our final model, we can see the associated ANOVA table to analyze the variance of each level: 
+```{r p21, echo=FALSE, message=FALSE, warnings=FALSE}
+print_html(xtable(anova(corr_model_sqrt)))
+```
+
+
+
+#### Results for question 1
+
+Thus, after trying 3 different models, we can clearly see that the first raw model does not work as the assumptions are not met at all and the results obtained (coefficient of determination, normality and homoscedasticity assumptions) make this model invalid. However, in order to meet these assumptions, trying the non-linear transformations and removing the leveraged outliers enable me to obtain a model with a high adjusted R-squared which proved the linear relationship between the delayed death rate and the predictor variables in each country. We have also seen that the most impacted country is: 
+
+***
+
+## Inferential analysis 2
+
+The second question of interest consisted in showing the relation between the number of cases and the stringency index. This variable represents the level of strictness of each government when it comes to social restrictions (like social distancing, no events or gathering, mandatory masks and vaccination etc). To answer this question I will use a two way-ANOVA with the features on stringency_index (which will be categorized to different levels), country and delayed CFR. Similarily as previously, we can show the causality between the stringency index and the positive rate: 
+
+```{r p22, echo=FALSE, message=FALSE, warnings=FALSE}
+options(scipen = 0)
+print_html(grangertest(stringency_index ~ new_cases, order = 3, data = df_vacc))
+```
+Once again, we can see the time impact of social restrictions on the number of positive cases which seems intuitive and reasonable. Similarily as previously, I will use the delayed variable to introduce this causality in my model. 
+
+First, we need to convert the stringency index for this model to a categorical variable by using the distribution: 
+
+```{r p23, echo=FALSE, message=FALSE, warnings=FALSE}
+par(mfrow = c(1, 2)) # combine plots
+hist(df_vacc$stringency_index, xlab='Stringency Index %', col='steelblue', main='Stringency index histogram')
+boxplot(df_vacc$stringency_index, xlab='Stringency Index %', col='steelblue', main='Stringency index boxplot')
+
+```
+
+Based on the previous plots and table (normally distribution although slightly left skewed) and the median is around 65%. Thus, let's break the tranches using the quantile values of the box-plot (i.e between 20-50/50-65/65-70/70-100)
+```{r p24, echo=FALSE, message=FALSE, warnings=FALSE}
+df_vacc$SIgroups <- cut(df_vacc$stringency_index, breaks=c(20, 55, 65, 70, 100), right = FALSE)
+```
+
+Let's see the table for each combination of groups: 
+
+````{r p25, echo=FALSE, message=FALSE, warning=FALSE}
+
+kbl(table(df_vacc$SIgroups, df_vacc$location)) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Next, we can introduce the model and its terminology. 
+
+We have the following model with the Factor Effect form for our unbalanced two-way ANOVA model with interactions: 
+
+- $Y_{i,j,k} = \mu_{..} + \alpha_i + \beta_j + (\alpha\beta)_{ij} + \epsilon_{i,j,k}$
+
+with :
+
+  - i represents the Stringency Index (SI) group: $i \in \{1,2,3,4,5,6\}, a=6$
+  
+  - j represents the country $\ j \in \{1,2,3,4,5,6\}, b=6$
+
+  - k represents the subject of the ith SI group type for the jth country $k \in \{1,...,n_{ij}\}$
+
+
+And where:
+
+  - $Y_{i,j,k}$ denotes the average number of delayed positive cases of the ith SI group for the jth country and the kth observation. 
+  
+  - $\mu_{..}$ denotes the overall number of delayed positive cases over the entire population for all countries, $\mu_{.j}$ is the mean of the jth column (jth country and for all SI groups), and $\mu_{i.}$ is the mean of the ith row (all positive cases of SI group i for all countries) and:
+    - $\mu_{.j} = \frac{\sum_{i=1}^6 w_{ij}*\mu_{ij}}{{\sum_{i=1}^6}w_{ij}}$
+    - $\mu_{i.} = \frac{\sum_{j=1}^6 w_{ij}*\mu_{ij}}{{\sum_{j=1}^6}w_{ij}}$
+    - $\mu_{..} =  \frac{\sum_{i=1}^6 \sum_{j=1}^6w_{ij}*\mu_{ij}}{{\sum_{i=1}^6\sum_{j=1}^6}w_{ij}}$
+  
+  - $\alpha_i$ is the mean effect of the ith SI group type such that $\alpha_i = \mu_i - \mu$
+  
+  - $\beta_i$ is the mean effect of the jth country 
+  
+  - $(\alpha\beta)_{ij}$ is the interaction effect representing the interaction of the ith level of SI and the jth country 
+  
+  - $\epsilon_{i,j,k}$ the independent and normally distributed random errors with mean 0 and unknown constant variance $\sigma^2$
+  
+Constraints: 
+
+  - $\sum_{i=1}^6 \alpha_i=0$
+  
+  - $\sum_{j=1}^6 \beta_j=0$
+  
+  - $\sum_{i=1}^6 (\alpha \beta)_{i,j}=0$ for all j
+  
+  - $\sum_{j=1}^6 (\alpha \beta)_{i,j}=0$ for all i
+
+  
+Let's evaluate if we should include the interaction terms using main and interaction plot effect analysis: 
+
+```{r p26, echo=FALSE, message=FALSE, warnings=FALSE}
+par(mfrow=c(1,2))
+options(warn = -1)
+
+# scaling the number of positive cases to the population of each country for better visualization 
+df_vacc$positive_rate_del <- df_vacc$delayed_cases/df_vacc$population*100000
+
+# main effects for Stringency Index
+plotmeans(positive_rate_del~ SIgroups, data=df_vacc, xlab="Stringency Index", ylab="Delayed Case rate", main="Main effect, Stringency Index",cex.lab=1, las=1)
+
+# Main effect plot for country
+plotmeans(positive_rate_del ~ factor(location), data = df_vacc, xlab="Location", ylab="Delayed Case rate", main="Main effect, Location", cex.lab=1) 
+```
+
+```{r p27, echo=FALSE, message=FALSE, warnings=FALSE}
+#Interaction plot
+interaction.plot(df_vacc$SIgroups, factor(df_vacc$location), df_vacc$positive_rate_del,cex.lab=1, ylab="Delayed Case rate", xlab="", main="Interaction plot of SI and country effects", las=2)
+```
+
+Looking at the interaction plot and the presence of different slopes for each country and different intersection between the curves, we can conclude that the model should include interaction terms. We will confirm that with the summary of our ANOVA model. The two first main effect plots show that the most impact on positive case rates is in Brazil, Italy and the USA. 
+Let's now run the model without any transformation:
+
+```{r p28, echo=FALSE, message=FALSE, warnings=FALSE, results='markup'}
+
+# Two-way anova model with cubic transformation on the dependent variable 
+fit2 <- aov(positive_rate_del ~ factor(location) + SIgroups + factor(location):SIgroups, df_vacc)
+pander(fit2, style='multiline')
+print(report(fit2))
+```
+
+Therefore, let's consider a two-way ANOVA model with interactions: 
+
+
+### Testing equality of means
+Now, we would like to see if the stringency index has a real effect on the death rate for each country, so let's run a hypothesis test with 
+
+- $H_0: \alpha_i = \alpha_j$ for all $i \neq j$\\ 
+- $H_1: \textrm{not all } \alpha_i \textrm{ are the same}$
+- Test statistics: $F^* = MSTR/MSE$
+- Under $H_0, F^* \sim F(r-1; n_T - r)$
+
+
+Thus, since, F(0.95; 2, 727) = 3.008111 and $F^* = 216.93$, we have $F(0.95; 2, 727) < F^*$, i.e we can reject the null hypothesis $H_0$ at significance level $\alpha = 0.05$ and say that there is a statistically significant difference in the means, and looking at the previous table's p-value, we can confirm this statement and say that there is of course an effect of the stringency index on the dataset. 
+
+***
+
+# Sensitivity Analysis 2
+
+Both factor variables are statistically significant for explaining the positive case rate as the previous results show (p-value << 0.05). We can then make the necessary sanity checks for this model with numerical tests as well as visualizations:
+
+
+- Normality assumption: 
+
+```{r p30, echo=FALSE, message=FALSE, warnings=FALSE}
+par(mfrow=c(1,2))
+hist(fit2$residuals, col='steelblue', main='Histogram of the residuals', xlab = 'residuals')
+
+# QQ-plot
+qqPlot(fit2$residuals, col='lightblue', id = FALSE, ylab = 'residuals', main='QQ-plot of the residuals')
+plot(fit2, which=1)
+
+shapiro.test(fit2$residuals)
+# Anderson-Darling test for normality of residuals since Shapiro is sensitive to large datasets
+ad.test(fit2$residuals)
+```
+The qq-plot is heavily tailed which shows that the normality assumption is not met and which is confirmed by the Shapiro-Wilk and Anderson_darling normality test (p-value < 0.05 which rejects the null hypothesis of normality). In addition the residuals vs fitted plot shows that the heteroskedasticity of the model (a second assumption not met)
+We can try to make non-linear transformation, this using the square root function, which seemed to have the most potential for this model: 
+
+```{r p31, echo=FALSE, message=FALSE, warnings=FALSE}
+# Defining the cubic root function to be able to apply it to scaled variable 
+Math.cbrt <- function(x) {
+    sign(x) * abs(x)^(1/3)
+}
+
+# Two-way anova model with cubic transformation on the dependent variable 
+fit3 <- aov(Math.cbrt(positive_rate_del) ~ factor(location) + SIgroups, df_vacc)
+
+pander(fit3, style='multiline')
+print(report(fit3))
+```
+
+```{r p32, echo=FALSE, message=FALSE, warnings=FALSE}
+par(mfrow=c(1,2))
+hist(fit3$residuals, col='steelblue', main='Histogram of the residuals', xlab = 'residuals')
+
+# QQ-plot
+qqPlot(fit3$residuals, col='lightblue', id = FALSE, ylab = 'residuals', main='QQ-plot of the residuals')
+plot(fit3, which=1)
+
+shapiro.test(fit3$residuals)
+# Anderson-Darling test for normality of residuals since Shapiro is sensitive to large datasets
+ad.test(fit3$residuals)
+```
+
+We can see that the plots (qqplot and distribution) show that the normality assumption is met, however the numerical tests show otherwise. And even in the case where this assumption is not met, it is important to specify that the normality assumption is not necessary in the case of large data samples(the central limit theorem shows that it will eventually tend to a normal distribution with n sufficiently large, usually n > 30 per group).
+
+- Homoscedasticity assumption with Levene's test and the previous residuals vs fitted values plot
+
+```{r p33, echo=FALSE, message=FALSE, warnings=FALSE}
+# Levene's test for homoscedasticity
+print_html(leveneTest(fit2$residuals, as.factor(df_vacc$SIgroups)))
+```
+Both of the previous tests show non equality of variance (since the p-value is a lot inferior to the significance level 0.01, we can reject the null hypothesis stating the equality of variances). 
+
+To improve this model, we can look at the outliers and try the corrected model:
+
+```{r p34, echo=FALSE, message=FALSE, warnings=FALSE}
+options(scipen = 0)
+
+HighLeverage <- cooks.distance(fit2) > (4/nrow(df_vacc))
+LargeResiduals <- rstudent(fit2) > 3
+df_vacc_corr <- df_vacc[!HighLeverage & !LargeResiduals,]
+corr_model_cub <- lm(Math.cbrt(positive_rate_del) ~ factor(location) + SIgroups 
+                     + factor(location):SIgroups, df_vacc_corr)
+
+print(report(fit3))
+
+par(mfrow=c(2,2))
+plot(corr_model_cub)
+tbl_regression((corr_model_cub)) 
+```
+Sanity checks:
+
+- Homoscedasticity at level 0.01
+```{r p35, echo=FALSE, message=FALSE, warnings=FALSE}
+# Levene's test for homoscedasticity at level 0.01
+leveneTest(corr_model_cub$residuals, as.factor(df_vacc_corr$location))
+```
+
+After running the same numerical and qualitative tests, we can see that without the outliers, the assumptions are still not met although the plots seems to show otherwise and the Levene's test shows that the heteroskedascicity has decreased. 
+
+Next, I want to know which country is associated with the highest death rate using a Tukey test:  
+```{r p29, echo=FALSE, message=FALSE, warning=FALSE}
+plot(TukeyHSD(fit3, conf.level=.95), las = 2)
+```
+We can see that the biggest difference in means is for a stringency index value between [55,65] and [22,55] which are two consecutive levels. That shows that there is a significant difference of restriction level after a certain threshold (which lies within these values) that impacts the positive rate in each country. In addition, the first plot shows that the biggest difference among countries is between Morocco-Brazil and USA-Japan which may be explained by the social and economic situation of the these countries which directly impacts the progress and management of the pandemic and thus the positive rate. 
+
+
+# Discussion 
+
+In conclusion, this projects overall answer two questions concerning the impact of vaccination and the stringency index and shows using two different models that there is indeed a statistical significant impact of these features on, respectively, on the death rate and the positive rate. In addition, to these models, we have also seen a clear time causality of these two variables and set the time difference to 10 days to truly capture the effect on the positive and death rates. However, if the regression model seemed to meet all the assumptions, the ANOVA model did not meet the homoscedasticity assumption. We could eventually try to change the model and choose a Negative-Binomial model which would me more adapted to this type of data. Overall, the results seem to be in line with the descriptive analysis and our intuition concerning our two main predictor variables. It would also have been interesting, for the vaccination analysis to see the impact in detail of each type of vaccine, and for the stringency index, to analyze each type de social restriction to evaluate which has the most impact of the new number of cases. 
+
+
+# Acknowledgment 
+
+I acknowledge that I have made changes in my report based on my teammates' discussion sessions.
+This report is entirely done by: Zineb Sordo, and not common part have been shared with the rest of the group. 
+
+# Reference
+
+Datasets:
+
+WHO Dataset: https://covid19.who.int/
+Owid-data-covid	: https://covid19datahub.io/articles/docs.html
+
+Background articles:
+
+- Assessing the long-term safety and efficacy of COVID-19 vaccines, 
+Azeem Majeed, Marisa Papaluca, Mariam Molokhia,
+https://journals.sagepub.com/doi/full/10.1177/01410768211013437
+
+- The Impact of Vaccination on Coronavirus Disease 2019 (COVID-19) Outbreaks in the United States 
+Seyed M Moghadas, Thomas N Vilches, Kevin Zhang, Chad R Wells, Affan Shoukat,
+https://academic.oup.com/cid/article/73/12/2257/6124429?login=true
+
+- Geospatial Analysis of COVID-19: A Scoping Review
+by Munazza Fatima, Kara J.O’Keefe,Wenjia Wei, Sana Arshad, Oliver Gruebner 
+https://www.mdpi.com/1660-4601/18/5/2336
+
+- WHO world data analysis:
+https://www.who.int/emergencies/diseases/novel-coronavirus-2019/situation-reports
+https://covid19.who.int/table
+
+- Kaggle projects:
+https://www.kaggle.com/allen-institute-for-ai/CORD-19-research-challenge/code
+https://www.kaggle.com/theyazilimci/covid-world-vaccination-analysis
+
+Technical references:
+
+- The Theory behind AB Testing: Introduction to Causal Inference
+https://kojinoshiba.com/causal%20inference/theory-behind-ab-testing/
+
+- Granger Causality test
+https://towardsdatascience.com/descriptive-statistics-in-time-series-modelling-db6ec569c0b8
+
+- GGplot2 plots:
+https://statsandr.com/blog/graphics-in-r-with-ggplot2/
+https://www.r-graph-gallery.com/199-correlation-matrix-with-ggally.html
+
+- Anova and Regression tests:
+https://www.statology.org/granger-causality-test-in-r/
+https://www.r-bloggers.com/2021/07/how-to-perform-ancova-in-r/
+https://www.r-bloggers.com/2019/08/shapiro-wilk-test-for-normality-in-r/
+https://statsandr.com/blog/multiple-linear-regression-made-simple/
+https://rforpoliticalscience.com/2020/08/03/check-for-multicollinearity-with-the-car-package-in-r/
+https://www.r-bloggers.com/2021/08/how-to-perform-tukey-hsd-test-in-r/
+
+- Graphics: 
+http://haozhu233.github.io/kableExtra/awesome_table_in_html.html#Grouped_Columns__Rows
+https://plotly-r.com/preface.html
+https://www.danieldsjoberg.com/gtsummary/articles/tbl_regression.html
+
+# Appendix
+
+````{r ref.label="p1",eval=FALSE}
+```
+
+````{r ref.label="p2",eval=FALSE}
+```
+
+````{r ref.label="p3",eval=FALSE}
+```
+
+````{r ref.label="p4",eval=FALSE}
+```
+
+````{r ref.label="p5",eval=FALSE}
+```
+
+
+
+````{r ref.label="p7",eval=FALSE}
+```
+
+````{r ref.label="p8",eval=FALSE}
+```
+
+
+````{r ref.label="p9",eval=FALSE}
+```
+
+
+````{r ref.label="p10",eval=FALSE}
+```
+
+````{r ref.label="p36",eval=FALSE}
+```
+
+
+
+````{r ref.label="p11",eval=FALSE}
+```
+
+
+
+````{r ref.label="p12",eval=FALSE}
+```
+
+
+
+````{r ref.label="p13",eval=FALSE}
+```
+
+
+````{r ref.label="p14",eval=FALSE}
+```
+
+````{r ref.label="p15",eval=FALSE}
+```
+
+````{r ref.label="p16",eval=FALSE}
+```
+
+
+````{r ref.label="p17",eval=FALSE}
+```
+
+
+
+````{r ref.label="p18",eval=FALSE}
+```
+
+
+````{r ref.label="p19",eval=FALSE}
+```
+
+
+````{r ref.label="p20",eval=FALSE}
+```
+
+
+````{r ref.label="p21",eval=FALSE}
+```
+
+````{r ref.label="p22",eval=FALSE}
+```
+
+````{r ref.label="p23",eval=FALSE}
+```
+
+````{r ref.label="p24",eval=FALSE}
+```
+
+````{r ref.label="p25",eval=FALSE}
+```
+
+````{r ref.label="p26",eval=FALSE}
+```
+
+````{r ref.label="p27",eval=FALSE}
+```
+
+````{r ref.label="p28",eval=FALSE}
+```
+
+
+````{r ref.label="p30",eval=FALSE}
+```
+
+````{r ref.label="p31",eval=FALSE}
+```
+
+````{r ref.label="p32",eval=FALSE}
+```
+
+````{r ref.label="p33",eval=FALSE}
+```
+
+
+````{r ref.label="p34",eval=FALSE}
+```
+
+````{r ref.label="p35",eval=FALSE}
+```
+
+````{r ref.label="p29",eval=FALSE}
+```
